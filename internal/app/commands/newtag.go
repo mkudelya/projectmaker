@@ -93,13 +93,17 @@ func (t *NewTag) Execute(projectId string, settings types.Settings, config *vipe
 	newTag := fmt.Sprintf("%s%s.%d.%d%s", match[latestMatch][1], match[latestMatch][2], minorVersionInt, patchVersionInt, match[latestMatch][5])
 	fmt.Printf("Project '%s' new tag %s\n", projectId, newTag)
 	var answer string
-	fmt.Print("Do you want to create new tag? (Y/n): ")
+	fmt.Print("Do you want to create new tag? (Y/n/[custom name]): ")
 	fmt.Scanf("%s", &answer)
 
 	if strings.ToLower(answer) != "y" && answer != "" {
-		return types.ErrIsNotAgreeWithTagCreation
+		if strings.ToLower(answer) == "n" {
+			return types.ErrIsNotAgreeWithTagCreation
+		} else {
+			newTag = answer
+		}
 	}
-
+	
 	fmt.Printf("Project '%s' try to create new tag %s\n", projectId, newTag)
 	cmd = exec.Command("git", "tag", newTag)
 	_, err = utils.ProcessExecResult(cmd)

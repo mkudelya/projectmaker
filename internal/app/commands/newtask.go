@@ -30,7 +30,7 @@ func (t *NewTask) Execute(projectId string, settings types.Settings, config *vip
 		return eris.Wrapf(err, "failed to checkout branch '%s'", config.GetString("git.main_branch"))
 	}
 
-	fmt.Printf("Project '%s' try to remore update\n", projectId)
+	fmt.Printf("Project '%s' try to remote update\n", projectId)
 	cmd = exec.Command("git", "remote", "update")
 	_, err := utils.ProcessExecResult(cmd)
 	if err != nil {
