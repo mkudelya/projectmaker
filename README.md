@@ -8,7 +8,6 @@ Commands are run in all specified projects
 ## Use examples:
 
 ### Create new_task_branch from main branch
-
 ```Bash
 projectmaker newtask project1,project2 new_task_branch 
 ```

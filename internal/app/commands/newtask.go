@@ -37,6 +37,13 @@ func (t *NewTask) Execute(projectId string, settings types.Settings, config *vip
 		return eris.Wrapf(err, "failed to remote update in branch '%s'", config.GetString("git.main_branch"))
 	}
 
+	fmt.Printf("Project '%s' try to pull\n", projectId)
+	cmd = exec.Command("git", "pull")
+	_, err = utils.ProcessExecResult(cmd)
+	if err != nil {
+		return eris.Wrapf(err, "failed to pull in branch '%s'", config.GetString("git.main_branch"))
+	}
+
 	fmt.Printf("Project '%s' create new branch\n", projectId)
 	cmd = exec.Command("git", "checkout", "-b", settings.Branch)
 	if _, err := utils.ProcessExecResult(cmd); err != nil {

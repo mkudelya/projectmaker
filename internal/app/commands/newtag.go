@@ -40,6 +40,13 @@ func (t *NewTag) Execute(projectId string, settings types.Settings, config *vipe
 		return eris.Wrapf(err, "failed to remote update in branch '%s'", config.GetString("git.main_branch"))
 	}
 
+	fmt.Printf("Project '%s' try to pull\n", projectId)
+	cmd = exec.Command("git", "pull")
+	_, err = utils.ProcessExecResult(cmd)
+	if err != nil {
+		return eris.Wrapf(err, "failed to pull in branch '%s'", config.GetString("git.main_branch"))
+	}
+
 	fmt.Printf("Project '%s' try to get latest tag\n", projectId)
 	cmd = exec.Command("git", "tag", "-l", "--sort=v:refname")
 
