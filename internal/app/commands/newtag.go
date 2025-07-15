@@ -20,32 +20,32 @@ func NewTagCommand() *NewTag {
 	return &NewTag{}
 }
 
-func (t *NewTag) Execute(projectAlias string, settings types.Settings, config *viper.Viper) error {
-	if err := t.Validate(settings); err != nil {
+func (t *NewTag) Execute(projectId string, settings types.Settings, config *viper.Viper) error {
+	if err := t.Validate(settings, config); err != nil {
 		return err
 	}
 
-	os.Chdir(utils.PathByProjectAlias(settings, projectAlias))
+	os.Chdir(utils.PathByProjectID(settings, projectId))
 
-	fmt.Printf("Project '%s' checkout to source branch\n", projectAlias)
-	cmd := exec.Command("git", "checkout", config.GetString("git.source_branch"))
+	fmt.Printf("Project '%s' checkout to source branch\n", projectId)
+	cmd := exec.Command("git", "checkout", config.GetString("git.main_branch"))
 	if _, err := utils.ProcessExecResult(cmd); err != nil {
-		return eris.Wrapf(err, "failed to checkout branch '%s'", config.GetString("git.source_branch"))
+		return eris.Wrapf(err, "failed to checkout branch '%s'", config.GetString("git.main_branch"))
 	}
 
-	fmt.Printf("Project '%s' try to remore update\n", projectAlias)
+	fmt.Printf("Project '%s' try to remore update\n", projectId)
 	cmd = exec.Command("git", "remote", "update")
 	_, err := utils.ProcessExecResult(cmd)
 	if err != nil {
-		return eris.Wrapf(err, "failed to remote update in branch '%s'", config.GetString("git.source_branch"))
+		return eris.Wrapf(err, "failed to remote update in branch '%s'", config.GetString("git.main_branch"))
 	}
 
-	fmt.Printf("Project '%s' try to get latest tag\n", projectAlias)
+	fmt.Printf("Project '%s' try to get latest tag\n", projectId)
 	cmd = exec.Command("git", "tag", "-l", "--sort=v:refname")
 
 	output, err := utils.ProcessExecResult(cmd)
 	if err != nil {
-		return eris.Wrapf(err, "failed get latest tag in branch '%s'", config.GetString("git.source_branch"))
+		return eris.Wrapf(err, "failed get latest tag in branch '%s'", config.GetString("git.main_branch"))
 	}
 
 	output = strings.Trim(output, "\r\n")
@@ -54,14 +54,14 @@ func (t *NewTag) Execute(projectAlias string, settings types.Settings, config *v
 	match := re.FindAllStringSubmatch(output, -1)
 	if len(match) == 0 {
 		fmt.Println(output)
-		return eris.Errorf("failed get latest tag in branch '%s'", config.GetString("git.source_branch"))
+		return eris.Errorf("failed get latest tag in branch '%s'", config.GetString("git.main_branch"))
 	}
 
 	latestMatch := len(match) - 1
 
-	fmt.Printf("Project '%s' latest tag %s\n", projectAlias, match[latestMatch][0])
+	fmt.Printf("Project '%s' latest tag %s\n", projectId, match[latestMatch][0])
 	if len(match[0]) < 5 {
-		return eris.Errorf("failed parse latest tag '%s' in branch '%s'", match[latestMatch][0], config.GetString("git.source_branch"))
+		return eris.Errorf("failed parse latest tag '%s' in branch '%s'", match[latestMatch][0], config.GetString("git.main_branch"))
 	}
 	minorVersion := match[latestMatch][3]
 	patchVersion := match[latestMatch][4]
@@ -84,7 +84,7 @@ func (t *NewTag) Execute(projectAlias string, settings types.Settings, config *v
 	}
 
 	newTag := fmt.Sprintf("%s%s.%d.%d%s", match[latestMatch][1], match[latestMatch][2], minorVersionInt, patchVersionInt, match[latestMatch][5])
-	fmt.Printf("Project '%s' new tag %s\n", projectAlias, newTag)
+	fmt.Printf("Project '%s' new tag %s\n", projectId, newTag)
 	var answer string
 	fmt.Print("Do you want to create new tag? (Y/n): ")
 	fmt.Scanf("%s", &answer)
@@ -93,23 +93,27 @@ func (t *NewTag) Execute(projectAlias string, settings types.Settings, config *v
 		return types.ErrIsNotAgreeWithTagCreation
 	}
 
-	fmt.Printf("Project '%s' try to create new tag %s\n", projectAlias, newTag)
+	fmt.Printf("Project '%s' try to create new tag %s\n", projectId, newTag)
 	cmd = exec.Command("git", "tag", newTag)
 	_, err = utils.ProcessExecResult(cmd)
 	if err != nil {
-		return eris.Wrapf(err, "failed to create new tag in branch '%s'", config.GetString("git.source_branch"))
+		return eris.Wrapf(err, "failed to create new tag in branch '%s'", config.GetString("git.main_branch"))
 	}
 
-	fmt.Printf("Project '%s' try to push new tag %s\n", projectAlias, newTag)
+	fmt.Printf("Project '%s' try to push new tag %s\n", projectId, newTag)
 	cmd = exec.Command("git", "push", config.GetString("git.remote_name"), newTag)
 	_, err = utils.ProcessExecResult(cmd)
 	if err != nil {
-		return eris.Wrapf(err, "failed to push new tag in branch '%s'", config.GetString("git.source_branch"))
+		return eris.Wrapf(err, "failed to push new tag in branch '%s'", config.GetString("git.main_branch"))
 	}
 
 	return nil
 }
 
-func (t *NewTag) Validate(settings types.Settings) error {
+func (t *NewTag) Validate(settings types.Settings, config *viper.Viper) error {
+	if config.GetString("git.repository_id") == "" {
+		return types.ErrEmptyGitRepositoryID
+	}
+
 	return nil
 }

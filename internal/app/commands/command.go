@@ -6,6 +6,6 @@ import (
 )
 
 type Command interface {
-	Execute(projectAlias string, settings types.Settings, config *viper.Viper) error
-	Validate(settings types.Settings) error
+	Execute(projectID string, settings types.Settings, config *viper.Viper) error
+	Validate(settings types.Settings, config *viper.Viper) error
 }

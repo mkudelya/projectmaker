@@ -3,6 +3,7 @@ module github.com/mkudelya/projectmaker
 go 1.24.5
 
 require (
+	github.com/rotisserie/eris v0.5.4
 	github.com/spf13/viper v1.20.1
 	gitlab.com/gitlab-org/api/client-go v0.134.0
 )
@@ -14,7 +15,6 @@ require (
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
-	github.com/rotisserie/eris v0.5.4 // indirect
 	github.com/sagikazarmark/locafero v0.7.0 // indirect
 	github.com/sourcegraph/conc v0.3.0 // indirect
 	github.com/spf13/afero v1.12.0 // indirect

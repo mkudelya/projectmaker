@@ -1,18 +1,21 @@
 projects:
-  - Gate Service:
-      alias: "gate"
-      path: "d:\\projects\\go\\projectmaker"
-  - Tracker Service:
-      alias: "tracker"
-      path: "d:\\projects\\go\\tracker\\"
+  - Orders Service:
+      project_id: "orders"
+      path: "/path_to_project/orders"
 
 # Git configuration is used to create new pull requests
+# Pull request will be created to http://gitlab.com/[repository_id]/[project_id]
 git:
+  enable: true
+  repository_id: "microservices"
   remote_name: "origin"
-  source_branch: "master"
+  main_branch: "master"
   server: "http://gitlab.com"
   token: ""
 
-pull_request_reviewers:
-  - "u1"
-  - "u2"
+pull_request:
+  authors:
+    - "a1"
+  reviewers:
+    - "r1"
+    - "r2"

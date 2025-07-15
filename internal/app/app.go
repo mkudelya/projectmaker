@@ -26,15 +26,23 @@ func NewApp() *App {
 
 func (a *App) InitApp(argv []string) error {
 	a.initConfig()
-	a.initGitLabClient()
 
-	err := a.initGitReviewUsers()
-	if err != nil {
-		return eris.Wrap(err, "failed to init git review users")
+	if a.Config.GetBool("git.enable") {
+		a.initGitLabClient()
+
+		err := a.initGitUsers()
+		if err != nil {
+			return eris.Wrap(err, "failed to init git review users")
+		}
 	}
 
-	err = a.initArgv(argv)
-	if err == nil {
+	if len(argv) == 1 {
+		a.Usage()
+		return nil
+	}
+
+	err := a.initArgv(argv)
+	if err != nil {
 		return eris.Wrap(err, "failed to init argv")
 	}
 
@@ -55,50 +63,74 @@ func (a *App) initConfig() {
 func (a *App) initGitLabClient() {
 	var err error
 
-	url, token := a.Config.GetString("git.server"), a.Config.GetString("git.token")
-	if url == "" || token == "" {
-		return
-	}
+	a.GitLabClient, err = gitlab.NewClient(
+		a.Config.GetString("git.token"),
+		gitlab.WithBaseURL(a.Config.GetString("git.server")),
+	)
 
-	a.GitLabClient, err = gitlab.NewClient(token, gitlab.WithBaseURL(url))
 	if err != nil {
 		panic(fmt.Errorf("gitlab error: %w", err))
 	}
 }
 
-func (a *App) initGitReviewUsers() error {
-	reviewerConfigList := a.Config.GetStringSlice("pull_request_reviewers")
+func (a *App) initGitUsers() error {
+	gitConfigUsers := a.Config.GetStringSlice("pull_request.authors")
+	gitConfigUsers = append(gitConfigUsers, a.Config.GetStringSlice("pull_request.reviewers")...)
 	var err error
-	if len(reviewerConfigList) == 0 {
+	if len(gitConfigUsers) == 0 {
 		return nil
 	}
 
-	var reviewerList []types.GitUser
-	reviewerList = a.GitReviewUsersFromFile()
+	var gitUsers []types.GitUser
+	gitUsers = a.GitUsersFromFile()
 
-	isFound := utils.IsAllReviewersFound(reviewerList, reviewerConfigList)
+	isFound := utils.IsAllUsersFound(gitUsers, gitConfigUsers)
 
 	if !isFound {
-		reviewerList, err = a.GitReviewersUsers(reviewerConfigList)
+		gitUsers, err = a.GitReviewersUsers(gitConfigUsers)
 		if err != nil {
-			return eris.Wrapf(err, "failed to get git reviewers users from git server")
+			return eris.Wrapf(err, "failed to get git users from git server")
 		}
 
-		err = a.CreateGitReviewUsersFile(reviewerList)
+		err = a.CreateGitUsersFile(gitUsers)
 		if err != nil {
-			return eris.Wrapf(err, "failed to create git review users file")
+			return eris.Wrapf(err, "failed to create git users file")
 		}
 	}
 
-	a.Settings.GitUsers = reviewerList
+	a.Settings.GitUsers = utils.SetTypeGitUser(a.Config, gitUsers)
+
+	var authorsCount, reviewersCount int
+	for _, user := range a.Settings.GitUsers {
+		if user.Type == types.GitAuthorUserType {
+			authorsCount++
+		}
+
+		if user.Type == types.GitReviewUserType {
+			reviewersCount++
+		}
+	}
+
+	if authorsCount == 0 {
+		return types.ErrEmptyGitAuthors
+	}
+
+	if reviewersCount == 0 {
+		return types.ErrEmptyGitReviewers
+
+	}
 
 	return nil
 }
 
-func (a *App) GitReviewersUsers(reviewerConfigList []string) ([]types.GitUser, error) {
+func (a *App) GitReviewersUsers(gitConfigUsers []string) ([]types.GitUser, error) {
 	gitUsers := make([]types.GitUser, 0)
 
-	for _, userName := range reviewerConfigList {
+	if a.GitLabClient == nil {
+		return gitUsers, eris.New("gitlab client is not initialized")
+	}
+
+	for _, userName := range gitConfigUsers {
 		trimmedName := strings.TrimSpace(userName)
 		users, _, err := a.GitLabClient.Users.ListUsers(&gitlab.ListUsersOptions{Search: &trimmedName})
 
@@ -126,7 +158,7 @@ func (a *App) GitReviewersUsers(reviewerConfigList []string) ([]types.GitUser, e
 	return gitUsers, nil
 }
 
-func (a *App) CreateGitReviewUsersFile(reviewerList []types.GitUser) error {
+func (a *App) CreateGitUsersFile(reviewerList []types.GitUser) error {
 	gitUsersJson, err := json.Marshal(reviewerList)
 	if err != nil {
 		return eris.Wrapf(err, "failed to marshal git users to json")
@@ -145,7 +177,7 @@ func (a *App) CreateGitReviewUsersFile(reviewerList []types.GitUser) error {
 	return nil
 }
 
-func (a *App) GitReviewUsersFromFile() []types.GitUser {
+func (a *App) GitUsersFromFile() []types.GitUser {
 	gitUsers := make([]types.GitUser, 0)
 
 	data, err := os.ReadFile(types.GitReviewUsersFileName)
@@ -175,7 +207,7 @@ func (a *App) initArgv(argv []string) error {
 		return types.ErrIsNotEnoughArgv
 	}
 
-	if a.Config.GetString("git.source_branch") == "" {
+	if a.Config.GetString("git.main_branch") == "" {
 		return types.ErrEmptyGitSourceBranch
 	}
 
@@ -186,8 +218,8 @@ func (a *App) initArgv(argv []string) error {
 		return eris.Wrapf(types.ErrInvalidCommand, "%s", command)
 	}
 
-	a.Settings.UserProjectsAliases = strings.Split(argv[2], ",")
-	if len(a.Settings.UserProjectsAliases) == 0 {
+	a.Settings.UserProjectIDs = strings.Split(argv[2], ",")
+	if len(a.Settings.UserProjectIDs) == 0 {
 		return types.ErrEmptyProjects
 	}
 
@@ -196,8 +228,8 @@ func (a *App) initArgv(argv []string) error {
 	}
 
 	for i, project := range a.Settings.ConfigProjects {
-		if project.Alias == "" {
-			return eris.Wrapf(types.ErrEmptyProjectAlias, "'%s'", project.Name)
+		if project.ProjectID == "" {
+			return eris.Wrapf(types.ErrEmptyProjectID, "'%s'", project.ProjectID)
 		}
 
 		info, err := os.Stat(project.Path)
@@ -215,15 +247,15 @@ func (a *App) initArgv(argv []string) error {
 		a.Settings.ConfigProjects[i] = p
 	}
 
-	for _, userAlias := range a.Settings.UserProjectsAliases {
+	for _, projectID := range a.Settings.UserProjectIDs {
 		isExist := false
 		for _, project := range a.Settings.ConfigProjects {
-			if project.Alias == userAlias {
+			if project.ProjectID == projectID {
 				isExist = true
 			}
 		}
 		if !isExist {
-			return eris.Wrapf(types.ErrIsNotExistProjectAlias, "%s", userAlias)
+			return eris.Wrapf(types.ErrIsNotExistProjectID, "%s", projectID)
 		}
 	}
 
@@ -239,21 +271,33 @@ func (a *App) ExecuteCommand() error {
 	case "newtag":
 		command = commands.NewTagCommand()
 	case "newmergerequest":
-		command = commands.NewMergeRequestCommand()
+		command = commands.NewMergeRequestCommand(a.GitLabClient)
 	default:
 		return eris.Wrapf(types.ErrInvalidCommand, "%s", a.Settings.Command)
 	}
 
-	for _, alias := range a.Settings.UserProjectsAliases {
-		fmt.Printf("Project '%s' start command execute\n", alias)
+	for _, projectID := range a.Settings.UserProjectIDs {
+		fmt.Printf("Project '%s' start command execute\n", projectID)
 
-		err := command.Execute(alias, a.Settings, a.Config)
+		err := command.Execute(projectID, a.Settings, a.Config)
 		if err != nil {
-			return eris.Wrapf(err, "failed to execute command in project '%s'", alias)
+			return eris.Wrapf(err, "failed to execute command in project '%s'", projectID)
 		}
 
-		fmt.Printf("Project '%s' command executed successfully\n", alias)
+		fmt.Printf("Project '%s' command executed successfully\n", projectID)
 	}
 
 	return nil
+}
+
+func (a *App) Usage() {
+	fmt.Printf("Usage: COMMAND PROJECT_IDS [PROJECT_BRANCH] \"[PROJECT_MR_TITLE]\"\n" +
+		"COMMAND:\n" +
+		"  newtask            Create new task branch from main branch\n" +
+		"  newtag             Create new tag and push it\n" +
+		"  newmergerequest    Create new merge request from [PROJECT BRANCH]\n" +
+		"PROJECT_IDS: list of project ids via comma\n" +
+		"PROJECT_BRANCH: branch name for new task or merge request\n" +
+		"PROJECT_MR_TITLE: title for new merge request\n",
+	)
 }

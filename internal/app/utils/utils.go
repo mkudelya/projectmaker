@@ -3,13 +3,14 @@ package utils
 import (
 	"fmt"
 	"github.com/mkudelya/projectmaker/internal/app/types"
-	"os"
+	"github.com/spf13/viper"
 	"os/exec"
+	"slices"
 )
 
-func PathByProjectAlias(settings types.Settings, alias string) string {
+func PathByProjectID(settings types.Settings, ID string) string {
 	for _, project := range settings.ConfigProjects {
-		if project.Alias == alias {
+		if project.ProjectID == ID {
 			return project.Path
 		}
 	}
@@ -27,20 +28,15 @@ func ProcessExecResult(cmd *exec.Cmd) (string, error) {
 	return string(output), nil
 }
 
-func IsExistGitUsersFile() bool {
-	_, err := os.Stat(types.GitReviewUsersFileName)
-	return !os.IsNotExist(err)
-}
-
-func IsAllReviewersFound(reviewersFileList []types.GitUser, reviewersConfigList []string) bool {
-	if len(reviewersFileList) == 0 {
+func IsAllUsersFound(gitUsers []types.GitUser, gitConfigUsers []string) bool {
+	if len(gitUsers) == 0 {
 		return false
 	}
 
-	for _, reviewerName := range reviewersConfigList {
+	for _, reviewerName := range gitConfigUsers {
 		var isFound bool
-		for _, reviewUser := range reviewersFileList {
-			if reviewerName == reviewUser.UserName {
+		for _, user := range gitUsers {
+			if reviewerName == user.UserName {
 				isFound = true
 				break
 			}
@@ -51,4 +47,23 @@ func IsAllReviewersFound(reviewersFileList []types.GitUser, reviewersConfigList 
 	}
 
 	return true
+}
+
+func SetTypeGitUser(config *viper.Viper, gitUsers []types.GitUser) []types.GitUser {
+	authors := config.GetStringSlice("pull_request.authors")
+	reviwers := config.GetStringSlice("pull_request.reviewers")
+
+	for i := range gitUsers {
+		if slices.Contains(authors, gitUsers[i].UserName) {
+			gitUsers[i].Type = types.GitAuthorUserType
+			continue
+		}
+
+		if slices.Contains(reviwers, gitUsers[i].UserName) {
+			gitUsers[i].Type = types.GitReviewUserType
+			continue
+		}
+	}
+
+	return gitUsers
 }
