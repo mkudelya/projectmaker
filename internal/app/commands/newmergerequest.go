@@ -1,6 +1,7 @@
 package commands
 
 import (
+	"fmt"
 	"github.com/mkudelya/projectmaker/internal/app/types"
 	"github.com/spf13/viper"
 	gitlab "gitlab.com/gitlab-org/api/client-go"
@@ -34,7 +35,7 @@ func (t *NewMergeRequest) Execute(projectID string, settings types.Settings, con
 	}
 
 	// Create a new Merge Request
-	_, _, err := t.gitLabClient.MergeRequests.CreateMergeRequest(projectPID, &gitlab.CreateMergeRequestOptions{
+	m, _, err := t.gitLabClient.MergeRequests.CreateMergeRequest(projectPID, &gitlab.CreateMergeRequestOptions{
 		SourceBranch:       gitlab.Ptr(settings.Branch),
 		TargetBranch:       gitlab.Ptr(config.GetString("git.main_branch")),
 		Title:              gitlab.Ptr(settings.TaskTitle),
@@ -43,6 +44,11 @@ func (t *NewMergeRequest) Execute(projectID string, settings types.Settings, con
 		ReviewerIDs:        &reviewersIDs,
 		AssigneeIDs:        &authorsIDs,
 	})
+
+	if err == nil && m != nil {
+		url := fmt.Sprintf("%s/%s/-/merge_requests/%d", config.GetString("git.server"), projectPID, m.IID)
+		fmt.Printf("Pull request URL: %s\n", url)
+	}
 
 	return err
 }
